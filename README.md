@@ -265,8 +265,7 @@ The sigil works with or without a leading slash (`/!!` and `!!` are the same).
 
 ## Headroom check: `@$$`, `$$`, `/$$`
 
-All three variants report how much of our current Claude rate-limit windows
-is used. Reply looks like:
+All three variants report usage of current Claude rate-limit windows. Reply looks like:
 
 ```
 5h: 12% (resets 4:30pm) · week: 47% (resets Sun 8:00pm)
@@ -298,14 +297,14 @@ unavailable: …)` placeholder rather than blocking note handling.
 
 Run this with both eyes open. The Signal Note-to-Self thread is a
 **remote-execution channel into the host** — the only thing standing between
-an attacker and our shell is whatever guards our Signal account.
+an attacker and the shell is whatever guards the Signal account.
 
 What's trusted:
 
 - Anything that reaches the linked device as Note-to-Self is treated as our
   own command. The agent never authenticates the sender beyond
-  "destination matches our own number" — there's no second factor.
-- Our phone — physical possession + Signal app + screen lock — is the ACL.
+  "destination matches phone's own number" — there's no second factor.
+- The phone — physical possession + Signal app + screen lock — is the ACL.
 - The OAuth token at `~/.claude/.credentials.json` is trusted for both
   `claude` invocations and the `$$` usage probe.
 
@@ -323,7 +322,7 @@ What's *not* assumed:
 
 Operational hygiene:
 
-- **Journal output contains our phone number** (`[init] account=+1…`).
+- **Journal output contains the phone number** (`[init] account=+1…`).
   Redact `[init]` lines before pasting logs into GitHub issues or
   pastebins.
 - Sessions for project-routed notes live under

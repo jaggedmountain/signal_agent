@@ -28,11 +28,11 @@ Out of scope (report upstream):
 
 See [Threat model](README.md#threat-model) in the README for the day-to-day
 operational posture (who is trusted, what `/!!` means, what the journal
-leaks). The short version: **whoever can post in our Signal Note-to-Self
+leaks). The short version: **whoever can post to Signal Note-to-Self
 thread can run code on the host**. The agent is a remote-execution channel
 guarded only by Signal's account-level security.
 
-If our phone is compromised — physically taken, SIM-swapped, or the Signal
+If the phone is compromised — physically taken, SIM-swapped, or the Signal
 account otherwise hijacked — the agent on the linked host should be assumed
 compromised too. Mitigations:
 
@@ -40,4 +40,4 @@ compromised too. Mitigations:
 - Unlink the device from the phone (Settings → Linked Devices) so future
   notes are not delivered to the host even if the service is restarted.
 - Rotate Anthropic credentials at `~/.claude/.credentials.json` if `/!!`
-  history suggests anyone but us reached the host.
+  history suggests a third party reached the host.
