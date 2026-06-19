@@ -4,7 +4,7 @@ Interact with agents via **Note to Self**.
 
 ## Overview
 
-A service that watches your Signal **Note to Self** thread and proxies notes to an agent harness and posts the reply back in the same thread — so your phone becomes a remote for agents on this host.
+A service that watches a Signal **Note to Self** thread and proxies notes to an agent harness and posts the reply back in the same thread — so a phone becomes a remote for agents on a host.
 
 Note syntax: `@route-directive /directive prompt` where directives are optional.
 
@@ -34,7 +34,7 @@ Prompts are fed to the agent in a specific project folder, so context is preserv
 - **[Claude Code](https://docs.claude.com/en/docs/claude-code) (`claude`)** on
   `PATH`, signed in. The `$$` directive also reads the OAuth token Claude
   Code writes to `~/.claude/.credentials.json`.
-- **Go 1.22+** only if you're building from source; the release artifacts are
+- **Go 1.22+** only if building from source; the release artifacts are
   static binaries with no runtime dependencies.
 
 ## Naming conventions
@@ -53,11 +53,11 @@ Either grab a release binary or build from source.
 ```bash
 # release artifact (replace TAG and arch as needed)
 curl -L -o ~/.local/bin/signal_agent \
-  https://github.com/USER/signal_agent/releases/download/TAG/signal_agent-TAG-linux-amd64
+  https://github.com/jaggedmountain/signal_agent/releases/download/1.0.0/signal_agent-1.0.0-linux-amd64
 chmod +x ~/.local/bin/signal_agent
 
-# or build it yourself
-git clone https://github.com/USER/signal_agent.git
+# or build it from source
+git clone https://github.com/jaggedmountain/signal_agent.git
 cd signal_agent
 go build -trimpath -ldflags='-s -w' -o ~/.local/bin/signal_agent
 ```
@@ -65,38 +65,38 @@ go build -trimpath -ldflags='-s -w' -o ~/.local/bin/signal_agent
 Releases are produced by GitHub Actions on each published release for
 linux/darwin/windows on amd64+arm64. Each artifact has a `.sha256` sidecar.
 
-### 1. Link this host to your Signal account
+### 1. Link this host to a Signal account
 
-This adds the host as a *linked device* (like Signal Desktop). Your phone stays
+This adds the host as a *linked device* (like Signal Desktop). The phone stays
 the primary device; no separate number is needed.
 
 `signal-cli link` is a **single blocking command** with two phases: it prints a
 `sgnl://linkdevice?...` URI immediately, then keeps running while it waits for
-your phone to scan and finish the handshake. It exits once linking succeeds (or
+the phone to scan and finish the handshake. It exits once linking succeeds (or
 times out after a couple of minutes), so keep it running and scan promptly.
 
 Render the QR *as the URI arrives* — do not pipe straight into `qrencode`, which
 waits for stdin EOF that never comes while the command blocks (it just hangs):
 
 ```bash
-signal-cli link -n "claude-host" | while IFS= read -r line; do
+signal-cli link -n "agent-host" | while IFS= read -r line; do
   printf '%s\n' "$line"
   case "$line" in sgnl://*) qrencode -t ANSIUTF8 "$line";; esac
 done
 ```
 
-Or use two terminals: run `signal-cli link -n "claude-host"` in one, copy the
+Or use two terminals: run `signal-cli link -n "agent-host"` in one, copy the
 `sgnl://...` line it prints, and in the other run
 `qrencode -t ANSIUTF8 'PASTE_URI'`.
 
-Then on your phone: **Signal → Settings → Linked Devices → + (Link New Device)**
-and scan the QR. The `link` command prints your account number and exits once
+Then on the phone: **Signal → Settings → Linked Devices → + (Link New Device)**
+and scan the QR. The `link` command prints the account number and exits once
 linking succeeds.
 
 Verify and let it sync once:
 
 ```bash
-signal-cli -a +YOURNUMBER receive          # should run without error
+signal-cli -a +PHONENUMBER receive          # should run without error
 ```
 
 > Note: as a linked (secondary) device, signal-cli sees messages from the moment
@@ -110,7 +110,7 @@ The binary self-bootstraps. Either walk through an interactive prompt:
 signal_agent --env       # prompts for each value, writes the config file
 ```
 
-…or let the first plain run create a template you edit by hand:
+…or let the first plain run create a template for manual edit:
 
 ```bash
 signal_agent             # creates ~/.config/signal_agent.env and exits
@@ -140,7 +140,7 @@ Generally a project has .claude/settings.json with permissions applicable to tha
 If more convenient, set `AGENT_EXTRA_ARGS` in the env file to apply globally for just
 prompts received through Signal. Either allow specific tools (safer) or skip
 permissions entirely (`--dangerously-skip-permissions`).
-The latter lets anything sent to your Note to Self run commands and edit
+The latter lets anything sent to Note to Self run commands and edit
 files on this host, so only enable it knowing that.
 
 Also, prefacing a note with `/!!` will include `--dangerously-skip-permissions` for just that prompt.
@@ -151,7 +151,7 @@ Also, prefacing a note with `/!!` will include `--dangerously-skip-permissions` 
 signal_agent
 ```
 
-Send yourself a Note to Self message ("what's 2+2?"). You should see log lines
+Send a Note to Self message ("what's 2+2?"). Observe log lines
 and a reply appear in the thread. Ctrl-C to stop. The binary reads
 `~/.config/signal_agent.env` itself — no shell sourcing needed.
 
@@ -185,7 +185,7 @@ flag). Edit by hand or via `signal_agent --env`.
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `SIGNAL_ACCOUNT` | — (required) | Your own number, E.164, e.g. `+15551234567` |
+| `SIGNAL_ACCOUNT` | — (required) | the phone number, E.164, e.g. `+15558675309` |
 | `SIGNAL_PROJECTS_ROOT` | `~/projects` | Root for `@<project>` routing |
 | `SIGNAL_CLI` | `signal-cli` | Path to the signal-cli binary |
 | `SIGNAL_CONFIG` | `~/.local/share/signal-cli` | signal-cli data dir, pinned to ignore ambient `XDG_DATA_HOME` |
@@ -216,12 +216,12 @@ target of `@/` / `@default`. The default must be a real folder under
 | `@?`            | Report `(active: X, previous: Y)`. Ack only, no Claude call.          |
 | `@*`            | List existing projects under `SIGNAL_PROJECTS_ROOT`                   |
 
-Switches persist: a bare `@shoebox` (no body) is acked with `(active: shoebox)`
-and the next plain note also lands in shoebox. Unknown names (`@bogus`) don't
+Switches persist: a bare `@cool_jam` (no body) is acked with `(active: cool_jam)`
+and the next plain note also lands in cool_jam. Unknown names (`@bogus`) don't
 switch — the agent logs `[route] @bogus: not a project; staying on '<active>'`
 and runs the note as-typed in the current active. Project lookup is
 case-insensitive with exact-case preference, so phone autocapitalization
-(`@Shoebox`) still resolves.
+(`@Cool_Jam`) still resolves.
 
 Within the active project, the agent runs `claude -p --continue` — Claude
 picks up the most recent session in that cwd. The very first turn in a project
@@ -239,7 +239,7 @@ written so the next plain note continues it.
 ```
 /clear let's plan the next sprint
 /clear                                  # fresh, send the real prompt next note
-@shoebox /clear new export format       # switch to shoebox AND fresh session
+@cool_jam /clear new export format        switch to cool_jam AND fresh session
 ```
 
 The directive is case-insensitive (`/CLEAR`, `/Clear`). Old sessions remain on
@@ -253,7 +253,7 @@ commands without changing the env, lead it with `/!!`:
 
 ```
 /!!  patch the typo in src/api/handlers.ts:142
-@shoebox /!!  bump the version in package.json and commit
+@cool_jam /!!  bump the version in package.json and commit
 ```
 
 The directive appends `--dangerously-skip-permissions` to that one `claude -p`
@@ -348,17 +348,17 @@ See [SECURITY.md](SECURITY.md) for vulnerability reporting.
 ## How note-to-self detection works
 
 ```
-Signal (your phone)  ──linked device──▶  signal-cli (jsonRpc daemon)
+Signal (the phone)  ──linked device──▶  signal-cli (jsonRpc daemon)
                                               │
                                          signal_agent    filters note-to-self
                                               │
                                          claude -p  ──▶ reply back to Note to Self
 ```
 
-Messages you type in Note to Self originate on your primary device, so the
+Messages typed in Note to Self originate on the primary device, so the
 linked host receives them as **sync transcripts**
-(`envelope.syncMessage.sentMessage`) whose destination is your own number. The
-watcher keeps only those, ignoring your normal outgoing chats to other people.
+(`envelope.syncMessage.sentMessage`) whose destination is the phone's own number. The
+watcher keeps only those, ignoring normal outgoing chats to other people.
 A note is processed if it has text, attachments, or both. Replies the agent
 sends are not echoed back to itself, so there is no feedback loop.
 
@@ -367,14 +367,14 @@ sends are not echoed back to itself, so there is no feedback loop.
 signal-cli downloads attachments into its own store
 (`$SIGNAL_CONFIG/attachments/<id>`) before the message reaches the watcher. For
 every attachment, the agent passes that in-place path to Claude in the prompt —
-it does not copy the file. So sending yourself a photo or a PDF (optionally with
+it does not copy the file. So sending a photo or a PDF (optionally with
 a caption) lets Claude open and reason about it: images are viewed directly, and
 PDFs/text have their contents extracted via the Read tool. Because the paths are
 stable, a file sent once can be referred to in later messages of the same
 session.
 
 For this to work, Claude must be allowed to read from the attachments directory
-— ensure your `AGENT_EXTRA_ARGS` permissions cover it.
+— ensure `AGENT_EXTRA_ARGS` permissions cover it.
 
 ## Troubleshooting
 
