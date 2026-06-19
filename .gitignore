@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual envs
+.venv/
+venv/
+env/
+
+# Editor / OS
+*.swp
+*.swo
+*~
+.DS_Store
+.idea/
+.vscode/
+
+# Local secrets / config
+.env
+env.local
+*.bak
+*.tmp
+
+# Local Claude Code settings (per-user permissions, hooks, etc.)
+.claude
+
+# Dev scratch — anything we tag with _tmp in the filename stays out of the repo
+*_tmp.py
+*_tmp.sh
+scratch/

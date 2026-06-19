@@ -1,0 +1,17 @@
+[Unit]
+Description=Signal Note-to-Self Claude agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# signal_agent reads its own config from $SIGNAL_AGENT_CONF
+# (default ~/.config/signal_agent.env), so no EnvironmentFile is needed.
+ExecStart=%h/.local/bin/signal_agent
+Restart=always
+RestartSec=5
+# Make ~/.local/bin (signal-cli, claude) visible to the service.
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+
+[Install]
+WantedBy=default.target
