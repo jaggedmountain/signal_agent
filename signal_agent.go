@@ -561,7 +561,7 @@ func getActive() string {
 
 func getPrevious() string { return readState(previousPath()) }
 
-// getProjectList: comma-separated project names with the active one marked '*'
+// getProjectList: newline-separated project names with the active one marked '*'
 // and the default marked '(default)'. Returns "(none)" when PROJECTS_ROOT is empty.
 func getProjectList() string {
 	entries, err := os.ReadDir(projectsRoot)
@@ -592,7 +592,7 @@ func getProjectList() string {
 		}
 		out = append(out, label)
 	}
-	return strings.Join(out, ", ")
+	return strings.Join(out, "\n")
 }
 
 // setActive switches active project, demoting old to previous. No-op if unchanged.
@@ -1350,7 +1350,7 @@ func (d *daemon) run() int {
 			d.sendMessage(fmt.Sprintf("(no previous project; active: %s)", getActive()))
 			continue
 		case routeList:
-			d.sendMessage("Existing projects: " + getProjectList())
+			d.sendMessage("Existing projects:\n" + getProjectList())
 			continue
 		case routeUsage:
 			d.sendMessage(usageReport())
