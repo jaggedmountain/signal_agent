@@ -375,6 +375,30 @@ session.
 For this to work, Claude must be allowed to read from the attachments directory
 — ensure `AGENT_EXTRA_ARGS` permissions cover it.
 
+### Voice notes
+
+Voice messages (Signal's hold-to-record clips) arrive as audio attachments
+(`audio/aac` from iOS, `audio/ogg` from Android, plus a `voiceNote: true`
+flag). If `SIGNAL_WHISPER_CLI` is set, the agent transcribes each voice clip
+locally before handing the note to Claude — the transcript is prepended to the
+text body, and the raw audio file is dropped from the attachment list. If
+transcription fails, the audio falls through to the existing
+attachment-as-file path.
+
+Audio never leaves the host: ffmpeg pipes the resampled WAV directly into
+whisper.cpp's stdin and the recognized text is read from its stdout. No
+intermediate files, no network calls.
+
+| Var | Default | Purpose |
+|---|---|---|
+| `SIGNAL_WHISPER_CLI` | (unset) | Path to the `whisper-cli` binary. Empty disables the feature. |
+| `SIGNAL_WHISPER_MODEL` | `~/.local/share/whisper/ggml-small.en.bin` | Whisper.cpp model file. Use a larger model for better accuracy. |
+| `SIGNAL_WHISPER_TIMEOUT` | `120` | Seconds before a single transcription is killed. |
+
+Both `ffmpeg` and `whisper-cli` must be on the service's `PATH`
+(`~/.local/bin:/usr/local/bin:/usr/bin:/bin` by default — see
+`signal_agent.service`).
+
 ## Troubleshooting
 
 - **`User +... is not registered`** even though linking worked: signal-cli is

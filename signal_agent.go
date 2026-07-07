@@ -97,6 +97,9 @@ var (
 	usageModel           string
 	usageTimeout         time.Duration
 	idleReceiveThreshold time.Duration // 0 disables
+	whisperCLI           string        // empty disables voice transcription
+	whisperModel         string
+	whisperTimeout       time.Duration
 )
 
 func logf(format string, args ...any) {
@@ -511,6 +514,13 @@ func initEnv() {
 	usageTimeout = time.Duration(envInt("SIGNAL_USAGE_TIMEOUT", 15)) * time.Second
 	idleReceiveThreshold = time.Duration(envFloat("SIGNAL_IDLE_RECYCLE_SEC", 7200) * float64(time.Second))
 
+	// Voice transcription. Unset SIGNAL_WHISPER_CLI = feature off (audio attachments
+	// pass through to claude as raw files). Set to e.g. "whisper-cli" to enable
+	// local transcription via ffmpeg + whisper.cpp.
+	whisperCLI = strings.TrimSpace(os.Getenv("SIGNAL_WHISPER_CLI"))
+	whisperModel = expandHome(envOr("SIGNAL_WHISPER_MODEL", "~/.local/share/whisper/ggml-small.en.bin"))
+	whisperTimeout = time.Duration(envInt("SIGNAL_WHISPER_TIMEOUT", 120)) * time.Second
+
 	defaultProject = resolveDefaultProject()
 }
 
@@ -884,6 +894,7 @@ func parseCommand(text string) (cmd, rest string) {
 type attachment struct {
 	ID          string `json:"id"`
 	ContentType string `json:"contentType,omitempty"`
+	VoiceNote   bool   `json:"voiceNote,omitempty"`
 }
 
 type sentMessage struct {
@@ -934,6 +945,53 @@ func extractNoteToSelf(env *envelope) (note, bool) {
 		ts = env.Timestamp
 	}
 	return note{text: text, attachments: sm.Attachments, ts: ts}, true
+}
+
+// isAudio returns true for attachments worth sending through whisper. signal-cli
+// sets VoiceNote for hold-to-record clips; the ContentType fallback catches
+// shared audio files (Voice Memos, etc).
+func isAudio(a attachment) bool {
+	return a.VoiceNote || strings.HasPrefix(a.ContentType, "audio/")
+}
+
+// transcribe pipes path through ffmpeg → whisper-cli and returns the recognized
+// text. Returns ("", nil) when whisper is disabled (whisperCLI == "") so the
+// caller can fall back to passing the raw file to claude.
+func transcribe(ctx context.Context, path string) (string, error) {
+	if whisperCLI == "" {
+		return "", nil
+	}
+	ctx, cancel := context.WithTimeout(ctx, whisperTimeout)
+	defer cancel()
+
+	ff := exec.CommandContext(ctx, "ffmpeg", "-loglevel", "error", "-nostdin",
+		"-i", path, "-ar", "16000", "-ac", "1", "-f", "wav", "-")
+	wh := exec.CommandContext(ctx, whisperCLI, "-m", whisperModel,
+		"-f", "-", "--no-prints", "--output-txt", "--output-file", "-")
+
+	pipe, err := ff.StdoutPipe()
+	if err != nil {
+		return "", fmt.Errorf("pipe: %w", err)
+	}
+	wh.Stdin = pipe
+
+	var out, ffErr, whErr bytes.Buffer
+	wh.Stdout = &out
+	wh.Stderr = &whErr
+	ff.Stderr = &ffErr
+
+	if err := wh.Start(); err != nil {
+		return "", fmt.Errorf("whisper start: %w", err)
+	}
+	if err := ff.Run(); err != nil {
+		_ = wh.Process.Kill()
+		_, _ = wh.Process.Wait()
+		return "", fmt.Errorf("ffmpeg: %w: %s", err, strings.TrimSpace(ffErr.String()))
+	}
+	if err := wh.Wait(); err != nil {
+		return "", fmt.Errorf("whisper: %w: %s", err, strings.TrimSpace(whErr.String()))
+	}
+	return strings.TrimSpace(out.String()), nil
 }
 
 func resolveAttachments(atts []attachment) []string {
@@ -1405,7 +1463,40 @@ func (d *daemon) run() int {
 			logf("[route] no history in %s; bootstrapping %s", cwd, sessionID)
 		}
 
-		files := resolveAttachments(n.attachments)
+		fileAtts := n.attachments
+		if whisperCLI != "" {
+			var kept []attachment
+			var transcripts []string
+			for _, a := range n.attachments {
+				if !isAudio(a) {
+					kept = append(kept, a)
+					continue
+				}
+				src := filepath.Join(signalAttachmentsDir, a.ID)
+				txt, err := transcribe(context.Background(), src)
+				if err != nil {
+					logf("[transcribe] %s: %v (falling back to raw attachment)", a.ID, err)
+					kept = append(kept, a)
+					continue
+				}
+				if txt == "" {
+					logf("[transcribe] %s: empty result (falling back to raw attachment)", a.ID)
+					kept = append(kept, a)
+					continue
+				}
+				logf("[transcribe] %s: %d chars", a.ID, len(txt))
+				transcripts = append(transcripts, txt)
+			}
+			if len(transcripts) > 0 {
+				parts := append([]string{}, transcripts...)
+				if body != "" {
+					parts = append(parts, body)
+				}
+				body = strings.Join(parts, "\n\n")
+			}
+			fileAtts = kept
+		}
+		files := resolveAttachments(fileAtts)
 		d.jobs <- job{
 			prompt:      buildPrompt(body, files),
 			targetTs:    n.ts,
