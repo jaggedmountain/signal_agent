@@ -118,7 +118,7 @@ $EDITOR ~/.config/signal_agent.env
 ```
 
 Point at a non-default location with either `-c` / `--config` or the
-`SIGNAL_AGENT_CONF` env var. Precedence is: env var → flag → default
+`SIGNAL_AGENT_CONF` env var. Precedence is: flag → env var → default
 (`~/.config/signal_agent.env`).
 
 ```bash
@@ -180,8 +180,8 @@ journalctl --user -u signal_agent.service -f      # live logs
 ## Configuration reference
 
 All settings live in `~/.config/signal_agent.env` (override with `-c
-/path/to/file.env` or `SIGNAL_AGENT_CONF=/path/to/file.env`; env wins over
-flag). Edit by hand or via `signal_agent --env`.
+/path/to/file.env` or `SIGNAL_AGENT_CONF=/path/to/file.env`; flag wins over
+env). Edit by hand or via `signal_agent --env`.
 
 | Variable | Default | Meaning |
 |---|---|---|

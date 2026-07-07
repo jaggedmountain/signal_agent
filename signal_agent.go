@@ -185,15 +185,15 @@ var configKeys = []configKey{
 }
 
 // configFlag is set by -c / --config in main. Resolved by configPath, which
-// also checks SIGNAL_AGENT_CONF (env wins over the flag, flag wins over the
+// also checks SIGNAL_AGENT_CONF (flag wins over env, env wins over the
 // default location).
 var configFlag string
 
 func configPath() string {
-	if v := strings.TrimSpace(os.Getenv("SIGNAL_AGENT_CONF")); v != "" {
+	if v := strings.TrimSpace(configFlag); v != "" {
 		return expandHome(v)
 	}
-	if v := strings.TrimSpace(configFlag); v != "" {
+	if v := strings.TrimSpace(os.Getenv("SIGNAL_AGENT_CONF")); v != "" {
 		return expandHome(v)
 	}
 	return filepath.Join(mustHome(), ".config", "signal_agent.env")
