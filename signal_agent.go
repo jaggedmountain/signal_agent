@@ -622,6 +622,10 @@ func setActive(name string) bool {
 
 // --- claude subprocess ---
 
+// attachSystemPrompt teaches Claude the outbound attachment convention. Only
+// appended when the note itself mentions "attach" — see runClaude.
+const attachSystemPrompt = "When you want to attach a file to your Signal reply, wrap each absolute path in <attach>...</attach> tags. The tags are stripped from the message body and the file is attached to the outgoing message. Paths must be absolute and exist on this host."
+
 func runClaude(ctx context.Context, prompt, sessionID, cwd, mode string, dangerous bool) (stdout, stderr string, exitCode int, err error) {
 	args := []string{"-p"}
 	var label string
@@ -639,6 +643,13 @@ func runClaude(ctx context.Context, prompt, sessionID, cwd, mode string, dangero
 	if dangerous {
 		args = append(args, "--dangerously-skip-permissions")
 		label += " (skip-permissions)"
+	}
+	// Only teach the outbound attach convention when the prompt already
+	// mentions "attach" — most notes don't need it, and the injection would
+	// otherwise burn tokens on every turn.
+	if strings.Contains(strings.ToLower(prompt), "attach") {
+		args = append(args, "--append-system-prompt", attachSystemPrompt)
+		label += " +attach-hint"
 	}
 	args = append(args, agentExtraArgs...)
 	logf("[claude] %s in %s, %d chars", label, cwd, len(prompt))
@@ -1256,10 +1267,67 @@ func (d *daemon) rpc(method string, params any) error {
 }
 
 func (d *daemon) sendMessage(text string) error {
-	return d.rpc("send", map[string]any{
+	body, atts := extractAttachMarkers(text)
+	p := map[string]any{
 		"recipient": []string{account},
-		"message":   text,
-	})
+		"message":   body,
+	}
+	if len(atts) > 0 {
+		p["attachments"] = atts
+		for _, a := range atts {
+			logf("[attach] outbound %s", a)
+		}
+	}
+	return d.rpc("send", p)
+}
+
+// attachRE matches `<attach>/abs/path</attach>` markers in claude replies.
+// Whitespace inside the tag is trimmed. Non-greedy so multiple markers in one
+// reply are captured independently.
+var attachRE = regexp.MustCompile(`(?s)<attach>\s*(.+?)\s*</attach>`)
+
+// maxOutboundAttachments caps how many files a single reply can request.
+// Signal's own limit is higher (~32), but a small cap contains runaway
+// hallucinations and matches how these replies are typically used.
+const maxOutboundAttachments = 10
+
+// extractAttachMarkers pulls file paths out of `<attach>…</attach>` tags in
+// text, strips the tags from the body, and returns the cleaned body plus the
+// list of existing absolute paths (in encountered order, deduped). Paths that
+// don't exist or aren't absolute are dropped with a log line — the tag comes
+// out of the body either way so the user doesn't see raw markup.
+func extractAttachMarkers(text string) (string, []string) {
+	matches := attachRE.FindAllStringSubmatchIndex(text, -1)
+	if len(matches) == 0 {
+		return text, nil
+	}
+	seen := make(map[string]bool)
+	var paths []string
+	for _, m := range matches {
+		raw := strings.TrimSpace(text[m[2]:m[3]])
+		if raw == "" {
+			continue
+		}
+		if !filepath.IsAbs(raw) {
+			logf("[attach] outbound skip (not absolute): %s", raw)
+			continue
+		}
+		if _, err := os.Stat(raw); err != nil {
+			logf("[attach] outbound skip (%v): %s", err, raw)
+			continue
+		}
+		if seen[raw] {
+			continue
+		}
+		if len(paths) >= maxOutboundAttachments {
+			logf("[attach] outbound skip (over cap %d): %s", maxOutboundAttachments, raw)
+			continue
+		}
+		seen[raw] = true
+		paths = append(paths, raw)
+	}
+	cleaned := strings.TrimSpace(attachRE.ReplaceAllString(text, ""))
+	return cleaned, paths
 }
 
 func (d *daemon) sendReaction(targetTs int64, emoji string, remove bool) error {

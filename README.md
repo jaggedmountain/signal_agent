@@ -399,6 +399,40 @@ Both `ffmpeg` and `whisper-cli` must be on the service's `PATH`
 (`~/.local/bin:/usr/local/bin:/usr/bin:/bin` by default — see
 `signal_agent.service`).
 
+### Outbound attachments (`<attach>…</attach>`)
+
+Replies from Claude can attach files to the Signal message by wrapping absolute
+paths in `<attach>` tags. The daemon parses them out, strips the tags from the
+message body, and passes the paths to `signal-cli send --attachments`. Example
+Claude reply:
+
+```
+Here's the crop I made:
+<attach>/tmp/crow-cropped.png</attach>
+```
+
+Rules:
+
+- Path must be absolute and exist. Non-absolute / missing paths are dropped
+  with a log line and the tag is stripped from the body regardless (never leak
+  raw markup to the phone).
+- Up to 10 attachments per reply (configurable via `maxOutboundAttachments`
+  in source); duplicates are deduped in encountered order.
+- Since `signal_agent` already owns the signal-cli account lock, this send
+  path never has the "config file in use" collision that a separate
+  `signal-cli send` invocation would hit.
+
+Claude doesn't know the convention on its own. `signal_agent` teaches it
+automatically by appending a one-line system-prompt hint via
+`--append-system-prompt` — **but only when the incoming note contains the
+substring "attach"** (case-insensitive). This keeps the token cost off every
+turn while still surfacing the capability whenever the user asks for a file
+back. The journal marks those spawns with `+attach-hint`.
+
+If you want the hint on turns that don't mention "attach" (e.g., because
+Claude should proactively offer files), add the same instruction to the
+project's `CLAUDE.md` or set it in `AGENT_EXTRA_ARGS`.
+
 ## Troubleshooting
 
 - **`User +... is not registered`** even though linking worked: signal-cli is
